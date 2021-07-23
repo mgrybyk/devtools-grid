@@ -9,7 +9,11 @@ Clone repo and
 1. `npm install`
 2. `npm run build`
 
-**Important**: temporary: apply `wdio-patch`
+### Frameworks
+
+- WebdriverIO: **Important**: to use with WebdriverIO temporary apply `wdio-patch`
+- [puppeteer](https://github.com/puppeteer/puppeteer), see [snippet](docs/PUPPETEER.md)
+- [playwright](https://github.com/microsoft/playwright), see [snippet](docs/PLAYWRIGHT.md)
 
 ## Usage
 

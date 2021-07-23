@@ -19,9 +19,9 @@ app.use('/health', healthRoute)
 
 // v1 api routes
 if (config.mode === MODES.GRID) {
-    app.use('/v1', gridRoute)
+    app.use('/devtools', gridRoute)
 } else if (config.mode === MODES.STANDALONE) {
-    app.use('/v1', nodeRoute)
+    app.use('/devtools', nodeRoute)
 }
 
 // send back a 404 error for any unknown api request

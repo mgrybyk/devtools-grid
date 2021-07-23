@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": { "sourceMap": false, "inlineSourceMap": false, "types": ["node"] }
+}

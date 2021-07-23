@@ -1,9 +1,11 @@
 import puppeteer from 'puppeteer-core'
 import { client as WebSocketClient, connection as WSConnection } from 'websocket'
 import { launch as launchChromeBrowser } from 'chrome-launcher'
+import { forwardMessage } from './wsMessage'
+import { logAndClose } from './wsError'
 
-export const clientConnections: Record<string, WSConnection> = {}
-export const serverConnections: Record<string, WSConnection> = {}
+export const nodeCdpConnections: Record<string, WSConnection> = {}
+export const serverCdpConnections: Record<string, WSConnection> = {}
 
 export async function spawnBrowser(chromeFlags: Array<string>) {
     const chrome = await launchChromeBrowser({
@@ -22,12 +24,10 @@ export async function spawnBrowser(chromeFlags: Array<string>) {
         fail = reject
     })
 
-    let client = new WebSocketClient()
+    const client = new WebSocketClient()
 
     client.once('connectFailed', function (error) {
         client.removeAllListeners()
-        // @ts-ignore
-        client = null
         console.log('Client Connect Error: ' + error.toString())
         bHttp.close()
         fail(new Error('Failed to connect to Chrome'))
@@ -35,10 +35,10 @@ export async function spawnBrowser(chromeFlags: Array<string>) {
 
     client.once('connect', function (connection: WSConnection) {
         client.removeAllListeners()
-        clientConnections[uuid] = connection
+        nodeCdpConnections[uuid] = connection
 
         const waitServer = setTimeout(() => {
-            if (!serverConnections[uuid]) {
+            if (!serverCdpConnections[uuid]) {
                 connection.close()
             }
         }, 10000)
@@ -46,30 +46,20 @@ export async function spawnBrowser(chromeFlags: Array<string>) {
         console.log('Client Connected to Chrome')
 
         connection.once('error', function (error) {
-            if (error.code !== 'ECONNRESET') {
-                console.log('Client Connection Error: ' + error.toString())
-            }
-            connection.close()
+            logAndClose(connection, error, 'CDP')
         })
 
         connection.once('close', function (reasonCode, description) {
             connection.removeAllListeners()
-            serverConnections[uuid]?.close()
-            delete clientConnections[uuid]
+            serverCdpConnections[uuid]?.close()
+            delete nodeCdpConnections[uuid]
             console.log('Client Connection Closed', reasonCode, description)
             clearTimeout(waitServer)
-            // @ts-ignore
-            client = null
             bHttp.close()
         })
 
         connection.on('message', function (message) {
-            if (message.type === 'utf8') {
-                serverConnections[uuid].sendUTF(message.utf8Data!)
-            } else if (message.type === 'binary') {
-                // seems like it never happens
-                serverConnections[uuid].sendBytes(message.binaryData!)
-            }
+            forwardMessage(serverCdpConnections[uuid], message)
         })
 
         success()

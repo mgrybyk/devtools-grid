@@ -1,6 +1,8 @@
 import { client as WebSocketClient, connection as WSConnection } from 'websocket'
 import { logger } from '../config/logger'
-import { clientConnections, serverConnections, spawnBrowser } from './node-connection'
+import { nodeCdpConnections, serverCdpConnections, spawnBrowser } from './node-connection'
+import { logAndClose } from './wsError'
+import { forwardMessage } from './wsMessage'
 
 let baseUrl: string
 const NODE_ID = `${Math.random()}`.replace('.', '')
@@ -13,15 +15,17 @@ gridClient.once('connectFailed', function (error) {
 })
 
 gridClient.once('connect', function (serviceConnection: WSConnection) {
+    console.log('connected!')
     gridClient.removeAllListeners()
-    serviceConnection.once('error', () => {
-        serviceConnection.close()
+    serviceConnection.once('error', (error) => {
+        logAndClose(serviceConnection, error, 'Service')
     })
 
     serviceConnection.once('close', () => {
         logger.log('serviceConnection closed')
         serviceConnection.removeAllListeners()
     })
+
     serviceConnection.on('message', async (message) => {
         const { id, chromeFlags } = JSON.parse(message.utf8Data!)
 
@@ -33,55 +37,52 @@ gridClient.once('connect', function (serviceConnection: WSConnection) {
             return serviceConnection.sendUTF(JSON.stringify({ id, error: true }))
         }
 
-        const gridDataClient = new WebSocketClient()
-        gridDataClient.once('connectFailed', function (error) {
-            gridDataClient.removeAllListeners()
-            console.log('Grid data client Connect Error: ' + error.toString())
-            serviceConnection.sendUTF(JSON.stringify({ id, error: true }))
-        })
-
-        gridDataClient.once('connect', function (dataConnection: WSConnection) {
-            gridDataClient.removeAllListeners()
-            serverConnections[uuid] = dataConnection
-
-            dataConnection.on('message', function (message) {
-                if (message.type === 'utf8') {
-                    clientConnections[uuid].sendUTF(message.utf8Data!)
-                } else if (message.type === 'binary') {
-                    // seems like it never happens
-                    clientConnections[uuid].sendBytes(message.binaryData!)
-                }
-            })
-
-            serviceConnection.once('close', () => {
-                dataConnection.close()
-            })
-            dataConnection.once('error', function (error) {
-                if (error.code !== 'ERR_STREAM_WRITE_AFTER_END') {
-                    console.warn('Server Connection Error: ' + error.toString())
-                }
-                dataConnection.close()
-            })
-
-            dataConnection.once('close', function (reasonCode, description) {
-                clientConnections[uuid]?.close()
-                dataConnection.removeAllListeners()
-                delete serverConnections[uuid]
-                console.log('Server connection close', reasonCode, description)
-            })
-
-            serviceConnection.sendUTF(JSON.stringify({ id, uuid }))
-        })
-
-        gridDataClient.connect(`${baseUrl}/grid/data/node/${NODE_ID}/${uuid}`)
+        spawnDataConnection(serviceConnection, { id, uuid })
     })
 
     serviceConnection.sendUTF(JSON.stringify({ slots: 2, info: {} }))
 })
 
+const spawnDataConnection = (serviceConnection: WSConnection, { id, uuid }: { id: string; uuid: string }) => {
+    const gridDataClient = new WebSocketClient()
+
+    gridDataClient.once('connectFailed', function (error) {
+        gridDataClient.removeAllListeners()
+        console.log('Grid data client Connect Error: ' + error.toString())
+        serviceConnection.sendUTF(JSON.stringify({ id, error: true }))
+    })
+
+    gridDataClient.once('connect', function (dataConnection: WSConnection) {
+        gridDataClient.removeAllListeners()
+        serverCdpConnections[uuid] = dataConnection
+
+        dataConnection.on('message', function (message) {
+            forwardMessage(nodeCdpConnections[uuid], message)
+        })
+
+        serviceConnection.once('close', () => {
+            dataConnection.close()
+        })
+        dataConnection.once('error', function (error) {
+            logAndClose(dataConnection, error, 'Data')
+        })
+
+        dataConnection.once('close', function (reasonCode, description) {
+            nodeCdpConnections[uuid]?.close()
+            dataConnection.removeAllListeners()
+            delete serverCdpConnections[uuid]
+            console.log('Server connection close', reasonCode, description)
+        })
+
+        serviceConnection.sendUTF(JSON.stringify({ id, uuid }))
+    })
+
+    gridDataClient.connect(`${baseUrl}/grid/data/node/${NODE_ID}/${uuid}`)
+}
+
 export const connectToGrid = (_baseUrl: string) => {
     if (!_baseUrl) {
-        console.log('Grid url was not provided, ex: ws://localhost:1347')
+        console.log('Grid url was not provided, ex: ws://localhost:1347/devtools')
         process.exit(1)
     }
     baseUrl = _baseUrl

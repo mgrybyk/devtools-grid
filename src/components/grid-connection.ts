@@ -81,7 +81,7 @@ const waitForNodes = async () => {
         attempts--
         await sleep(1000)
 
-        if (lastPendingId === pendingId && attempts % 1 === 0) {
+        if (lastPendingId === pendingId && attempts % 5 === 0) {
             logger.info('Still waiting for nodes, attempts left', attempts, 'Pending', pending)
         }
     }

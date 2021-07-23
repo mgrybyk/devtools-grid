@@ -5,7 +5,7 @@ import { spawnBrowser } from '../../components/node-connection'
 export const nodeRoute = Router()
 
 nodeRoute.post(
-    '/node',
+    '/spawn',
     asyncHandler(async (req, res) => {
         const uuid = await spawnBrowser(req.body.chromeFlags)
         res.json({ uuid })

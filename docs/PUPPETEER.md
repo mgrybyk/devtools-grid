@@ -8,7 +8,7 @@ const gridPort = 1347
 const chromeFlags = ['--headless'];
 
 ;(async () => {
-    const { body } = await got.post(`http${gridSecure ? 's' : ''}://${gridHost}:${gridPort}/devtools/grid`, {
+    const { body } = await got.post(`http${gridSecure ? 's' : ''}://${gridHost}:${gridPort}/devtools/spawn`, {
         json: { chromeFlags },
         responseType: 'json'
     });

@@ -5,7 +5,7 @@ import { spawnNodeConnection } from '../../components/grid-connection'
 export const gridRoute = Router()
 
 gridRoute.post(
-    '/grid',
+    '/spawn',
     asyncHandler(async (req, res) => {
         const uuid = await spawnNodeConnection(req.body.chromeFlags)
         res.json({ uuid })
